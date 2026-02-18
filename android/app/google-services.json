@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "426794987394",
+    "project_id": "streakup-habits",
+    "storage_bucket": "streakup-habits.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:426794987394:android:58c9ac65cd0a09f85da99b",
+        "android_client_info": {
+          "package_name": "com.streakup.streakup"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "426794987394-oumrmmqu0c0uqmd92lgun5gk79hj6eba.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.streakup.streakup",
+            "certificate_hash": "60e7ae4df806df272a45872dda2158f59177053c"
+          }
+        },
+        {
+          "client_id": "426794987394-2cjov20er7bsdbdmjlfijnj9s3l87r91.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNyIk1lK9Op6Q6OCsZQ2juX0Fc3Aju-F8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "426794987394-2cjov20er7bsdbdmjlfijnj9s3l87r91.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
