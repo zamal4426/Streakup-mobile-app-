@@ -357,7 +357,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       context: context,
       initialTime: _reminderHour != null
           ? TimeOfDay(hour: _reminderHour!, minute: _reminderMinute!)
-          : const TimeOfDay(hour: 8, minute: 0),
+          : const TimeOfDay(hour: 12, minute: 0),
       builder: (context, child) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return MediaQuery(
@@ -392,6 +392,23 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     }
 
     if (time != null) {
+      // Only allow PM times (12:00 PM to 11:59 PM, i.e., hour 12–23)
+      if (time.hour < 12) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                  'Please select a time between 12:00 PM and 11:59 PM'),
+              backgroundColor: AppTheme.accentColor,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+        return;
+      }
       setState(() {
         _reminderHour = time.hour;
         _reminderMinute = time.minute;
@@ -1676,7 +1693,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                   Text(
                     _reminderHour != null
                         ? _formatTime(_reminderHour!, _reminderMinute!)
-                        : 'Tap to set a daily reminder',
+                        : 'Tap to set reminder (PM only)',
                     style: TextStyle(
                       color: _reminderHour != null
                           ? _activeColor
