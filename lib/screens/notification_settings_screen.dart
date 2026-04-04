@@ -207,6 +207,11 @@ class _NotificationSettingsScreenState
           Switch(
             value: _globalEnabled,
             onChanged: (val) async {
+              if (val && !NotificationService.isPermissionGranted) {
+                // Show explanation dialog before requesting permission
+                final granted = await NotificationService.requestPermissionWithExplanation(context);
+                if (!granted) return;
+              }
               setState(() => _globalEnabled = val);
               await StorageService.setNotifications(val);
               if (val) {

@@ -320,7 +320,9 @@ class StatisticsTab extends StatelessWidget {
 
   Widget _buildStatCard(BuildContext context,
       String label, String value, IconData icon, Color color) {
-    return Container(
+    return Semantics(
+      label: '${label.replaceAll('\n', ' ')}: $value',
+      child: Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.surface(context),
@@ -362,6 +364,7 @@ class StatisticsTab extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -528,15 +531,29 @@ class StatisticsTab extends StatelessWidget {
                         padding: const EdgeInsets.only(right: cellGap),
                         child: Column(
                           children: week.map((level) {
+                            final levelLabel = level == -1
+                                ? 'Future'
+                                : level == 0
+                                    ? 'No activity'
+                                    : level == 1
+                                        ? 'Low activity, under 25%'
+                                        : level == 2
+                                            ? 'Medium activity, 25 to 50%'
+                                            : level == 3
+                                                ? 'High activity, 50 to 99%'
+                                                : 'Full completion, 100%';
                             return Padding(
                               padding:
                                   const EdgeInsets.only(bottom: cellGap),
-                              child: Container(
-                                width: cellSize,
-                                height: cellSize,
-                                decoration: BoxDecoration(
-                                  color: _heatmapColor(context, level),
-                                  borderRadius: BorderRadius.circular(3),
+                              child: Semantics(
+                                label: levelLabel,
+                                child: Container(
+                                  width: cellSize,
+                                  height: cellSize,
+                                  decoration: BoxDecoration(
+                                    color: _heatmapColor(context, level),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
                                 ),
                               ),
                             );
@@ -581,37 +598,44 @@ class StatisticsTab extends StatelessWidget {
   }
 
   Widget _buildHeatmapLegend(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Text(
-          'Less',
-          style: TextStyle(
-            color: AppTheme.textSecondaryColor(context),
-            fontSize: 10,
+    const legendLabels = ['No activity', 'Low', 'Medium', 'High', 'Full'];
+    return Semantics(
+      label: 'Heatmap legend: green intensity from less activity to more activity',
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            'Less',
+            style: TextStyle(
+              color: AppTheme.textSecondaryColor(context),
+              fontSize: 10,
+            ),
           ),
-        ),
-        const SizedBox(width: 4),
-        for (var i = 0; i <= 4; i++) ...[
-          Container(
-            width: 12,
-            height: 12,
-            margin: const EdgeInsets.symmetric(horizontal: 1.5),
-            decoration: BoxDecoration(
-              color: _heatmapColor(context, i),
-              borderRadius: BorderRadius.circular(2),
+          const SizedBox(width: 4),
+          for (var i = 0; i <= 4; i++) ...[
+            Semantics(
+              label: legendLabels[i],
+              child: Container(
+                width: 12,
+                height: 12,
+                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                decoration: BoxDecoration(
+                  color: _heatmapColor(context, i),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 4),
+          Text(
+            'More',
+            style: TextStyle(
+              color: AppTheme.textSecondaryColor(context),
+              fontSize: 10,
             ),
           ),
         ],
-        const SizedBox(width: 4),
-        Text(
-          'More',
-          style: TextStyle(
-            color: AppTheme.textSecondaryColor(context),
-            fontSize: 10,
-          ),
-        ),
-      ],
+      ),
     );
   }
 

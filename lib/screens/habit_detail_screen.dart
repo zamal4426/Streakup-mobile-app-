@@ -58,6 +58,30 @@ class HabitDetailScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: habitService,
       builder: (context, _) {
+        if (habitService.isLoading) {
+          return Scaffold(
+            backgroundColor: AppTheme.background(context),
+            body: SafeArea(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.primaryColor),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Loading habit details...',
+                      style: TextStyle(
+                        color: AppTheme.textSecondaryColor(context),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         // Get the latest version of this habit
         final current = habitService.habits.firstWhere(
           (h) => h.id == habit.id,

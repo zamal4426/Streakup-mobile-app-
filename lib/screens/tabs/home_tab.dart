@@ -60,15 +60,41 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _triggerConfetti() {
+  void _triggerConfetti([String? message]) {
     _particles = List.generate(60, (_) => _ConfettiParticle(_random));
     _confettiController.reset();
-    setState(() => _showConfetti = true);
+    setState(() {
+      _showConfetti = true;
+    });
     _confettiController.forward();
 
     // Play celebration chime + haptic feedback
     CelebrationSound.play();
     HapticFeedback.mediumImpact();
+
+    // Show a snackbar with the celebration message
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Text('\u{1F389} ', style: TextStyle(fontSize: 20)),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF4CAF50),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   String _getMotivationalMessage(double progress, int total) {
@@ -104,10 +130,14 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   List<Habit> _filterHabits(List<Habit> habits) {
     var filtered = habits.toList();
 
-    // Apply search
+    // Apply search (case-insensitive across name, category, notes, and tags)
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      filtered = filtered.where((h) => h.name.toLowerCase().contains(q)).toList();
+      filtered = filtered.where((h) =>
+          h.name.toLowerCase().contains(q) ||
+          h.category.toLowerCase().contains(q) ||
+          h.notes.toLowerCase().contains(q) ||
+          h.tags.any((t) => t.toLowerCase().contains(q))).toList();
     }
 
     // Apply filter
@@ -165,7 +195,26 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
             progress >= 1.0 &&
             total > 0) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _triggerConfetti();
+            _triggerConfetti('All habits completed today!');
+          });
+        } else if (_hasInitialized && _prevProgress >= 0 && _prevProgress < 0.5 && progress >= 0.5 && total > 2) {
+          // Celebrate 50% daily completion when there are enough habits
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Text('\u{1F4AA} ', style: TextStyle(fontSize: 20)),
+                    Expanded(child: Text('Halfway there! Keep going!', style: TextStyle(fontWeight: FontWeight.w600))),
+                  ],
+                ),
+                backgroundColor: AppTheme.primaryColor,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                margin: const EdgeInsets.all(16),
+                duration: const Duration(seconds: 2),
+              ),
+            );
           });
         }
         _prevProgress = progress;
@@ -306,8 +355,8 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                         widget.habitService
                                             .togglePin(habit.id);
                                       },
-                                      onStreakMilestone: () {
-                                        _triggerConfetti();
+                                      onStreakMilestone: (message) {
+                                        _triggerConfetti(message);
                                       },
                                     ),
                                   );
@@ -854,10 +903,9 @@ class _HabitTile extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onPin;
-  final VoidCallback onStreakMilestone;
+  final void Function(String? message) onStreakMilestone;
 
   const _HabitTile({
-    super.key,
     required this.habit,
     required this.index,
     required this.onToggle,
@@ -911,12 +959,31 @@ class _HabitTileState extends State<_HabitTile>
     if (!_wasCompleted && nowCompleted) {
       _streakAnimController.forward(from: 0);
 
-      // Detect streak milestone crossings (3-day and 7-day)
-      if ((_previousStreak < 3 && newStreak >= 3) ||
-          (_previousStreak < 7 && newStreak >= 7)) {
+      final bestStreak = widget.habit.bestStreak;
+
+      // First-ever streak (first completion)
+      if (_previousStreak == 0 && newStreak >= 1 && widget.habit.completedDates.length == 1) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          widget.onStreakMilestone();
+          widget.onStreakMilestone('First completion for ${widget.habit.name}! The journey begins!');
         });
+      }
+      // New best streak
+      else if (newStreak > 1 && newStreak == bestStreak && _previousStreak < bestStreak) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.onStreakMilestone('New best streak: $newStreak days for ${widget.habit.name}!');
+        });
+      }
+      // Milestone crossings at 3, 7, 14, 21, 30, 50, 100 days
+      else {
+        const milestones = [3, 7, 14, 21, 30, 50, 100];
+        for (final m in milestones) {
+          if (_previousStreak < m && newStreak >= m) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              widget.onStreakMilestone('$m-day streak for ${widget.habit.name}!');
+            });
+            break;
+          }
+        }
       }
     }
 
@@ -1074,6 +1141,45 @@ class _HabitTileState extends State<_HabitTile>
                           color: AppTheme.textSecondaryColor(context),
                           fontSize: 11,
                           fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  // Streak freezes indicator
+                  if (widget.habit.streakFreezes > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Semantics(
+                        label: '${widget.habit.streakFreezes} streak freeze${widget.habit.streakFreezes == 1 ? '' : 's'} remaining',
+                        child: Row(
+                          children: [
+                            for (var i = 0; i < widget.habit.streakFreezes && i < 5; i++)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 2),
+                                child: Icon(
+                                  Icons.ac_unit_rounded,
+                                  color: const Color(0xFF42A5F5).withValues(alpha: 0.7),
+                                  size: 12,
+                                ),
+                              ),
+                            if (widget.habit.streakFreezes > 5)
+                              Text(
+                                '+${widget.habit.streakFreezes - 5}',
+                                style: TextStyle(
+                                  color: const Color(0xFF42A5F5).withValues(alpha: 0.7),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              )
+                            else
+                              Text(
+                                ' ${widget.habit.streakFreezes} freeze${widget.habit.streakFreezes == 1 ? '' : 's'}',
+                                style: TextStyle(
+                                  color: const Color(0xFF42A5F5).withValues(alpha: 0.6),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),

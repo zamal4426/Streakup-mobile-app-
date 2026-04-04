@@ -8,6 +8,31 @@ import 'storage_service.dart';
 class HabitService extends ChangeNotifier {
   static const String _key = 'habits_data';
   List<Habit> _habits = [];
+  bool _isLoading = true;
+
+  /// Whether data is still being loaded from storage/cloud
+  bool get isLoading => _isLoading;
+
+  /// User-facing error message; null when there is no error.
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
+  /// Clear the current error (e.g. after the UI has displayed it).
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  void _setError(String message) {
+    _errorMessage = message;
+    notifyListeners();
+  }
+
+  /// Log a Firestore sync failure and surface it to the UI.
+  void _handleSyncError(String operation, Object error) {
+    debugPrint('HabitService.$operation cloud sync failed: $error');
+    _setError('Could not sync to cloud. Changes saved locally.');
+  }
 
   /// All habits including deleted ones (full list)
   List<Habit> get allHabitsIncludingDeleted => _habits;
@@ -47,6 +72,9 @@ class HabitService extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    _isLoading = true;
+    notifyListeners();
+
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString(_key);
     if (data != null && data.isNotEmpty) {
@@ -64,13 +92,19 @@ class HabitService extends ChangeNotifier {
         // Cloud empty but local has data → migrate to cloud
         await FirestoreService.uploadAll(_habits);
       }
-    } catch (_) {
+    } catch (e) {
       // Offline or Firestore not configured — use local data
+      debugPrint('HabitService.load cloud sync failed: $e');
+      _errorMessage = 'Could not connect to cloud. Using local data.';
     }
+
+    // Permanently remove habits soft-deleted more than 30 days ago
+    await purgeOldDeletedHabits();
 
     // Capture yesterday's snapshot if missing
     await _captureYesterdaySnapshotIfNeeded();
 
+    _isLoading = false;
     notifyListeners();
 
     // Reschedule all alarms on every app startup.
@@ -95,7 +129,7 @@ class HabitService extends ChangeNotifier {
     await _save();
     notifyListeners();
     await NotificationService.scheduleHabitReminder(habit);
-    try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+    try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('addHabit', e); }
   }
 
   Future<void> updateHabit(Habit habit) async {
@@ -105,7 +139,7 @@ class HabitService extends ChangeNotifier {
       await _save();
       notifyListeners();
       await NotificationService.scheduleHabitReminder(habit);
-      try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+      try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('updateHabit', e); }
     }
   }
 
@@ -118,7 +152,7 @@ class HabitService extends ChangeNotifier {
       habit.deletedAt = DateTime.now();
       await _save();
       notifyListeners();
-      try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+      try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('deleteHabit', e); }
     }
   }
 
@@ -133,7 +167,7 @@ class HabitService extends ChangeNotifier {
     habit.toggleDate(DateTime.now());
     await _save();
     notifyListeners();
-    try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+    try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('syncHabit', e); }
   }
 
   Future<void> toggleHabitOnDate(String id, DateTime date) async {
@@ -142,7 +176,7 @@ class HabitService extends ChangeNotifier {
     habit.toggleDate(date);
     await _save();
     notifyListeners();
-    try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+    try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('syncHabit', e); }
   }
 
   Future<void> skipHabitToday(String id) async {
@@ -151,7 +185,7 @@ class HabitService extends ChangeNotifier {
     habit.skipDate(DateTime.now());
     await _save();
     notifyListeners();
-    try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+    try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('syncHabit', e); }
   }
 
   Future<void> unskipHabitToday(String id) async {
@@ -160,7 +194,7 @@ class HabitService extends ChangeNotifier {
     habit.unskipDate(DateTime.now());
     await _save();
     notifyListeners();
-    try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+    try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('syncHabit', e); }
   }
 
   Future<void> useStreakFreeze(String id) async {
@@ -171,7 +205,7 @@ class HabitService extends ChangeNotifier {
       habit.skipDate(DateTime.now());
       await _save();
       notifyListeners();
-      try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+      try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('syncHabit', e); }
     }
   }
 
@@ -197,7 +231,7 @@ class HabitService extends ChangeNotifier {
       for (final h in active) {
         await FirestoreService.upsertHabit(h);
       }
-    } catch (_) {}
+    } catch (e) { _handleSyncError('reorderHabit', e); }
   }
 
   Future<void> togglePin(String id) async {
@@ -206,7 +240,32 @@ class HabitService extends ChangeNotifier {
     habit.isPinned = !habit.isPinned;
     await _save();
     notifyListeners();
-    try { await FirestoreService.upsertHabit(habit); } catch (_) {}
+    try { await FirestoreService.upsertHabit(habit); } catch (e) { _handleSyncError('syncHabit', e); }
+  }
+
+  // --- Cleanup soft-deleted habits ---
+
+  /// Permanently removes habits that were soft-deleted more than 30 days ago.
+  /// Also deletes them from Firestore. Call this periodically (e.g. on app start).
+  Future<void> purgeOldDeletedHabits() async {
+    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final toRemove = _habits.where((h) =>
+        h.isDeleted && h.deletedAt != null && h.deletedAt!.isBefore(cutoff)).toList();
+
+    if (toRemove.isEmpty) return;
+
+    for (final habit in toRemove) {
+      _habits.remove(habit);
+      try {
+        await FirestoreService.deleteHabit(habit.id);
+      } catch (e) {
+        debugPrint('HabitService.purgeOldDeletedHabits: failed to delete ${habit.id} from cloud: $e');
+      }
+    }
+
+    await _save();
+    debugPrint('Purged ${toRemove.length} soft-deleted habit(s) older than 30 days.');
+    notifyListeners();
   }
 
   // --- Snapshot System ---

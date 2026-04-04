@@ -11,7 +11,6 @@ import '../services/timer_service.dart';
 import '../models/habit.dart';
 import 'add_habit_screen.dart';
 import 'alarm_screen.dart';
-import 'habit_detail_screen.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/calendar_tab.dart';
 import 'tabs/statistics_tab.dart';

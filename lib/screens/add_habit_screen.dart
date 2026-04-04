@@ -297,32 +297,38 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
   Color get _activeColor => _colors[_selectedColorIndex];
 
+  void _showValidationError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.accentColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
   void _submit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please enter a habit name'),
-          backgroundColor: AppTheme.accentColor,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+      _showValidationError('Please enter a habit name');
+      return;
+    }
+    if (name.length > 100) {
+      _showValidationError('Habit name must be 100 characters or less');
       return;
     }
     if (!_useTargetPerWeek && _repeatDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please select at least one repeat day'),
-          backgroundColor: AppTheme.accentColor,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+      _showValidationError('Please select at least one repeat day');
+      return;
+    }
+    if (_useTargetPerWeek && (_targetPerWeek < 1 || _targetPerWeek > 7)) {
+      _showValidationError('Weekly target must be between 1 and 7');
+      return;
+    }
+    if (_reminderHour != null && _repeatDays.isEmpty && !_useTargetPerWeek) {
+      _showValidationError('Please select repeat days for your reminder');
       return;
     }
 

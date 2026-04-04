@@ -53,6 +53,25 @@ class _CalendarTabState extends State<CalendarTab> {
     return ListenableBuilder(
       listenable: widget.habitService,
       builder: (context, _) {
+        if (widget.habitService.isLoading) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: AppTheme.primaryColor),
+                const SizedBox(height: 16),
+                Text(
+                  'Loading calendar...',
+                  style: TextStyle(
+                    color: AppTheme.textSecondaryColor(context),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
         final scheduled = _habitsForDate(_selectedDate);
         final completedCount = _completedCount(_selectedDate);
 
@@ -118,28 +137,32 @@ class _CalendarTabState extends State<CalendarTab> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _focusedMonth = DateTime(
-                _focusedMonth.year,
-                _focusedMonth.month - 1,
-              );
-            });
-          },
-          child: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: AppTheme.surface(context),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.cardBorderColor(context)),
-              boxShadow: AppTheme.cardShadow(context),
-            ),
-            child: Icon(
-              Icons.chevron_left_rounded,
-              color: AppTheme.textPrimaryColor(context),
-              size: 22,
+        Semantics(
+          label: 'Previous month',
+          button: true,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _focusedMonth = DateTime(
+                  _focusedMonth.year,
+                  _focusedMonth.month - 1,
+                );
+              });
+            },
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppTheme.surface(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.cardBorderColor(context)),
+                boxShadow: AppTheme.cardShadow(context),
+              ),
+              child: Icon(
+                Icons.chevron_left_rounded,
+                color: AppTheme.textPrimaryColor(context),
+                size: 22,
+              ),
             ),
           ),
         ),
@@ -160,28 +183,32 @@ class _CalendarTabState extends State<CalendarTab> {
             ),
           ),
         ),
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _focusedMonth = DateTime(
-                _focusedMonth.year,
-                _focusedMonth.month + 1,
-              );
-            });
-          },
-          child: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: AppTheme.surface(context),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.cardBorderColor(context)),
-              boxShadow: AppTheme.cardShadow(context),
-            ),
-            child: Icon(
-              Icons.chevron_right_rounded,
-              color: AppTheme.textPrimaryColor(context),
-              size: 22,
+        Semantics(
+          label: 'Next month',
+          button: true,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _focusedMonth = DateTime(
+                  _focusedMonth.year,
+                  _focusedMonth.month + 1,
+                );
+              });
+            },
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppTheme.surface(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.cardBorderColor(context)),
+                boxShadow: AppTheme.cardShadow(context),
+              ),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.textPrimaryColor(context),
+                size: 22,
+              ),
             ),
           ),
         ),
@@ -242,62 +269,72 @@ class _CalendarTabState extends State<CalendarTab> {
               final hasCompleted = _hasCompletions(date);
               final isFuture = date.isAfter(today);
 
+              final scheduled = _habitsForDate(date);
+              final dayCompleted = _completedCount(date);
+              final completionLabel = scheduled.isEmpty
+                  ? 'No habits scheduled'
+                  : '$dayCompleted of ${scheduled.length} completed';
+
               return Expanded(
-                child: GestureDetector(
-                onTap: () => setState(() => _selectedDate = date),
-                child: SizedBox(
-                  height: 44,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppTheme.primaryColor
-                              : isToday
-                                  ? AppTheme.primaryColor
-                                      .withValues(alpha: 0.15)
-                                  : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$dayNum',
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : isFuture
-                                      ? AppTheme.textSecondaryColor(context)
-                                          .withValues(alpha: 0.45)
-                                      : isToday
-                                          ? AppTheme.primaryColor
-                                          : AppTheme.textPrimaryColor(context),
-                              fontSize: 14,
-                              fontWeight: isSelected || isToday
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
+                child: Semantics(
+                  label: '${_formatDate(date)}, ${isToday ? "today, " : ""}$completionLabel${isSelected ? ", selected" : ""}',
+                  button: true,
+                  child: GestureDetector(
+                  onTap: () => setState(() => _selectedDate = date),
+                  child: SizedBox(
+                    height: 44,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primaryColor
+                                : isToday
+                                    ? AppTheme.primaryColor
+                                        .withValues(alpha: 0.15)
+                                    : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$dayNum',
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : isFuture
+                                        ? AppTheme.textSecondaryColor(context)
+                                            .withValues(alpha: 0.45)
+                                        : isToday
+                                            ? AppTheme.primaryColor
+                                            : AppTheme.textPrimaryColor(context),
+                                fontSize: 14,
+                                fontWeight: isSelected || isToday
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      // Green dot indicator
-                      Container(
-                        width: 5,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: hasCompleted
-                              ? const Color(0xFF4CAF50)
-                              : Colors.transparent,
+                        const SizedBox(height: 2),
+                        // Green dot indicator
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: hasCompleted
+                                ? const Color(0xFF4CAF50)
+                                : Colors.transparent,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                ),
               );
             }),
           ),
@@ -402,7 +439,15 @@ class _CalendarTabState extends State<CalendarTab> {
     final isFuture = _selectedDate.isAfter(DateTime.now());
     final isDeletedHabit = habit.isDeleted;
 
-    return GestureDetector(
+    final statusLabel = isCompleted
+        ? 'completed'
+        : isSkipped
+            ? 'skipped'
+            : 'not completed';
+    return Semantics(
+      label: '${habit.name}, ${habit.category}, $statusLabel${isDeletedHabit ? ", deleted habit" : ""}',
+      button: !isFuture && !isDeletedHabit,
+      child: GestureDetector(
       onTap: isFuture
           ? null
           : () => widget.habitService.toggleHabitOnDate(habit.id, _selectedDate),
@@ -541,6 +586,7 @@ class _CalendarTabState extends State<CalendarTab> {
           ],
         ),
       ),
+    ),
     );
   }
 

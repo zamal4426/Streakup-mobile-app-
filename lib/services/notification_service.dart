@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:alarm/alarm.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -27,15 +28,47 @@ class NotificationService {
     try {
       final now = DateTime.now();
       final offset = now.timeZoneOffset;
-      final locations = tz.timeZoneDatabase.locations.values.where((loc) {
-        final tzNow = tz.TZDateTime.now(loc);
-        return tzNow.timeZoneOffset == offset;
-      });
-      if (locations.isNotEmpty) {
-        tz.setLocalLocation(locations.first);
+      final tzName = now.timeZoneName;
+
+      // First, try to match by the Dart-reported timezone name (e.g. "EST",
+      // "CET"). This is more reliable than offset alone because multiple
+      // timezones can share the same UTC offset.
+      tz.Location? bestMatch;
+      try {
+        bestMatch = tz.getLocation(tzName);
+      } catch (e) {
+        debugPrint('Notification error: $e');
+      }
+
+      if (bestMatch == null) {
+        // Fallback: find the first location whose current UTC offset matches.
+        final candidates = tz.timeZoneDatabase.locations.values.where((loc) {
+          try {
+            return tz.TZDateTime.now(loc).timeZoneOffset == offset;
+          } catch (e) {
+            debugPrint('Notification error: $e');
+            return false;
+          }
+        });
+        if (candidates.isNotEmpty) {
+          bestMatch = candidates.first;
+        }
+      }
+
+      if (bestMatch != null) {
+        tz.setLocalLocation(bestMatch);
+        debugPrint('Timezone set to ${bestMatch.name}');
+      } else {
+        // Ultimate fallback: UTC so scheduled notifications still work.
+        tz.setLocalLocation(tz.getLocation('UTC'));
+        debugPrint('Could not detect timezone; defaulting to UTC');
       }
     } catch (e) {
       debugPrint('Failed to set local timezone: $e');
+      // Ensure we always have a valid local location even on failure.
+      try {
+        tz.setLocalLocation(tz.getLocation('UTC'));
+      } catch (e) { debugPrint('Notification error: $e'); }
     }
 
     const androidSettings =
@@ -78,7 +111,7 @@ class NotificationService {
   }
 
   static void _onNotificationResponse(NotificationResponse response) {
-    // Handle notification tap
+    debugPrint('Notification tapped: ${response.payload}');
   }
 
   static Future<bool> requestPermission() async {
@@ -106,6 +139,69 @@ class NotificationService {
     }
 
     return false;
+  }
+
+  /// Whether notification permission has already been granted
+  static bool get isPermissionGranted => _permissionGranted;
+
+  /// Shows an explanation dialog before requesting notification permission.
+  /// Returns true if permission was granted.
+  static Future<bool> requestPermissionWithExplanation(BuildContext context) async {
+    if (_isDesktop) return false;
+    if (_permissionGranted) return true;
+
+    // Show explanation dialog first
+    final shouldProceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.notifications_active_rounded, color: Color(0xFFFFB74D), size: 24),
+            SizedBox(width: 10),
+            Text('Enable Notifications'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'StreakUp uses notifications to help you stay on track with your habits.',
+              style: TextStyle(fontSize: 14, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            const _PermissionBullet(icon: Icons.alarm_rounded, text: 'Alarm reminders for each habit'),
+            const SizedBox(height: 6),
+            const _PermissionBullet(icon: Icons.schedule_send_rounded, text: 'Smart pre-reminders before your alarm'),
+            const SizedBox(height: 6),
+            const _PermissionBullet(icon: Icons.follow_the_signs_rounded, text: 'Follow-up nudges if you forget'),
+            const SizedBox(height: 12),
+            const Text(
+              'You can change this anytime in Settings.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Not Now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldProceed != true) return false;
+
+    return await requestPermission();
   }
 
   /// How many weeks of alarms to schedule ahead.
@@ -310,5 +406,29 @@ class NotificationService {
   /// Follow-up notification ID (flutter_local_notifications).
   static int _followUpNotificationId(String habitId, int weekday) {
     return (habitId.hashCode.abs() % 100000) * 10 + weekday + 6000000;
+  }
+}
+
+/// Helper widget used in the permission explanation dialog
+class _PermissionBullet extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _PermissionBullet({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFFFFB74D)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 13, height: 1.3),
+          ),
+        ),
+      ],
+    );
   }
 }

@@ -377,6 +377,14 @@ class _ProfileTabState extends State<ProfileTab> {
                 value: _notifications,
                 color: const Color(0xFFFFB74D),
                 onChanged: (val) async {
+                  if (val && !NotificationService.isPermissionGranted) {
+                    // Show explanation dialog before requesting permission
+                    final granted = await NotificationService.requestPermissionWithExplanation(context);
+                    if (!granted) {
+                      // User declined — don't toggle
+                      return;
+                    }
+                  }
                   setState(() => _notifications = val);
                   await StorageService.setNotifications(val);
                   if (val) {
